@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Authenticating…</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #0d0d18;
+      font-family: sans-serif;
+      color: #9aa0bc;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <span>Authenticating…</span>
+  <script>
+    // Extract access_token from URL hash
+    const hash       = window.location.hash.slice(1)
+    const params     = new URLSearchParams(hash)
+    const token      = params.get('access_token')
+
+    // Also check query string for errors
+    const query      = new URLSearchParams(window.location.search)
+    const queryError = query.get('error')
+    const hashError  = params.get('error')
+    const error      = hashError || queryError
+
+    if (token) {
+      // Send token to parent window
+      window.opener?.postMessage(
+        { type: 'GOOGLE_TOKEN', token },
+        window.location.origin
+      )
+    } else {
+      // Send error to parent window
+      window.opener?.postMessage(
+        { type: 'GOOGLE_ERROR', error: error || 'no_token' },
+        window.location.origin
+      )
+    }
+
+    // Close popup after sending message
+    setTimeout(() => window.close(), 300)
+  </script>
+</body>
+</html>

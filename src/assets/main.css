@@ -1,0 +1,167 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ════════════════════════════════════════════════════════════════════════════
+   THEME VARIABLES
+   Edit these two blocks to customize light / dark colors in one place.
+   surface-950 = page background → surface-300 = secondary text
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Light theme (default) ───────────────────────────────────────────────── */
+:root {
+  --surface-950: #ffffff;   /* page background        */
+  --surface-900: #f8f9fc;   /* subtle background      */
+  --surface-800: #f1f3f8;   /* card background        */
+  --surface-750: #e8ebf4;   /* alternate row          */
+  --surface-700: #e2e5ef;   /* input background       */
+  --surface-600: #d0d4e6;   /* borders                */
+  --surface-500: #9aa0bc;   /* muted borders          */
+  --surface-400: #6b7294;   /* placeholder / icon     */
+  --surface-300: #4b5280;   /* secondary text         */
+  --surface-gray: #d0d4e6;   /* secondary text         */
+
+  --text-base:   #1e1e2d;   /* body text              */
+  --bg-base:     #f8f9fc;   /* body background        */
+}
+
+/* ── Dark theme ──────────────────────────────────────────────────────────── */
+html.dark {
+  --surface-950: #343d55;   /* page background        */
+  --surface-900: #0d0d18;   /* subtle background      */
+  --surface-800: #283046;   /* card background        */
+  --surface-750: #161628;   /* alternate row          */
+  --surface-700: #1c1c32;   /* input background       */
+  --surface-600: #24243e;   /* borders                */
+  --surface-500: #2e2e50;   /* muted borders          */
+  --surface-400: #959ba8;   /* placeholder / icon     */
+  --surface-300: #525278;   /* secondary text         */
+  --surface-gray: #d0d4e6;   /* secondary text         */
+
+  --text-base:   #e2e8f0;   /* body text              */
+  --bg-base:     #161d31;   /* body background        */
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BASE
+   ════════════════════════════════════════════════════════════════════════════ */
+@layer base {
+  html, body, #app {
+    @apply h-full;
+  }
+  body {
+    background-color: var(--bg-base);
+    color:            var(--text-base);
+    @apply antialiased;
+    font-family: 'Plus Jakarta Sans', 'Battambang', sans-serif;
+  }
+
+  ::-webkit-scrollbar       { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--surface-900); }
+  ::-webkit-scrollbar-thumb { background: var(--surface-500); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--surface-400); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   COMPONENTS
+   ════════════════════════════════════════════════════════════════════════════ */
+@layer components {
+
+  /* ── Buttons ─────────────────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600
+           text-white font-semibold text-sm rounded-xl transition-all shadow-lg
+           shadow-brand-500/20 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-4 py-2.5
+           border font-medium text-sm rounded-xl transition-all;
+    background-color: var(--surface-800);
+    border-color:     var(--surface-gray);
+    color:            var(--text-base);
+  }
+  .btn-ghost:hover {
+    background-color: var(--surface-700);
+    border-color:     var(--surface-500);
+  }
+  .btn-danger {
+    @apply inline-flex items-center gap-2 px-3 py-1.5
+           border font-medium text-xs rounded-lg transition-all
+           bg-red-50 hover:bg-red-100 border-red-200 hover:border-red-300 text-red-600;
+  }
+  html.dark .btn-danger {
+    @apply bg-red-500/10 hover:bg-red-500/20 border-red-500/30 text-red-400;
+  }
+  .btn-success {
+    @apply inline-flex items-center gap-2 px-3 py-1.5
+           border font-medium text-xs rounded-lg transition-all
+           bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700;
+  }
+  html.dark .btn-success {
+    @apply bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-400;
+  }
+  .btn-warning {
+    @apply inline-flex items-center gap-2 px-3 py-1.5
+           border font-medium text-xs rounded-lg transition-all
+           bg-brand-50 hover:bg-brand-100 border-brand-200 text-brand-700;
+  }
+  html.dark .btn-warning {
+    @apply bg-brand-500/10 hover:bg-brand-500/20 border-brand-500/30 text-brand-400;
+  }
+
+  /* ── Form ────────────────────────────────────────────────────────────── */
+  .form-input {
+    @apply w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all
+           focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500;
+    background-color: var(--surface-950);
+    border: 1px solid var(--surface-gray);
+    color:  var(--text-base);
+  }
+  .form-select {
+    @apply w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all cursor-pointer
+           focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500;
+    background-color: var(--surface-950);
+    border: 1px solid var(--surface-gray);
+    color:  var(--text-base);
+  }
+  .form-label {
+    @apply block text-xs font-semibold uppercase tracking-wider mb-2;
+    color: var(--surface-400);
+  }
+
+  /* ── Card ────────────────────────────────────────────────────────────── */
+  .card {
+    @apply rounded-2xl shadow-sm;
+    background-color: var(--surface-950);
+    border: 1px solid var(--surface-600);
+  }
+  html.dark .card {
+    background-color: var(--surface-800);
+  }
+
+  /* ── Badges ──────────────────────────────────────────────────────────── */
+  .badge-admin   { @apply bg-brand-50   text-brand-700   border border-brand-200;   }
+  .badge-client  { @apply bg-indigo-50  text-indigo-700  border border-indigo-200;  }
+  .badge-active  { @apply bg-emerald-50 text-emerald-700 border border-emerald-200; }
+  .badge-sold    { @apply bg-red-50     text-red-600     border border-red-200;     }
+  .badge-pending { @apply bg-amber-50   text-amber-700   border border-amber-200;   }
+
+  html.dark .badge-admin   { @apply bg-brand-500/10   text-brand-400   border-brand-500/25;   }
+  html.dark .badge-client  { @apply bg-indigo-500/10  text-indigo-400  border-indigo-500/25;  }
+  html.dark .badge-active  { @apply bg-emerald-500/10 text-emerald-400 border-emerald-500/25; }
+  html.dark .badge-sold    { @apply bg-red-500/10     text-red-400     border-red-500/25;     }
+  html.dark .badge-pending { @apply bg-amber-500/10   text-amber-400   border-amber-500/25;   }
+}
+
+/* ── Table hover ─────────────────────────────────────────────────────────── */
+tbody tr { transition: background 0.12s ease; }
+tbody tr:hover { background: var(--surface-750); }
+
+/* ── Modal ───────────────────────────────────────────────────────────────── */
+.modal-enter-active, .modal-leave-active { transition: all 0.2s ease; }
+.modal-enter-from,   .modal-leave-to     { opacity: 0; transform: scale(0.96) translateY(8px); }
+
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+.toast-enter-active, .toast-leave-active { transition: all 0.25s ease; }
+.toast-enter-from { opacity: 0; transform: translateX(16px); }
+.toast-leave-to   { opacity: 0; transform: translateX(16px); }
