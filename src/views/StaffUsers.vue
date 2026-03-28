@@ -148,8 +148,8 @@
                 </svg>
                 Edit
               </button>
-              <button @click="toggleStatus(row)" :class="row.is_active ? 'btn-danger' : 'btn-success'"   
-                :disabled="row.role?.name === 'administrator'"                 
+              <button @click="toggleStatus(row)" :class="row.is_active ? 'btn-danger' : 'btn-success'"
+                :disabled="row.role?.name === 'administrator'"
                 class="btn-warning disabled:opacity-30 disabled:cursor-not-allowed"
                 :title="row.role?.name === 'administrator' ? 'Cannot edit the super administrator' : ''">
                 {{ row.is_active ? 'Disable' : 'Enable' }}
@@ -290,7 +290,7 @@
                   <input v-model="createModal.form.password" type="password" placeholder="••••••••" required minlength="6" class="form-input" />
                 </div>
 
-                <!-- Role selector — also used by Google register -->
+                <!-- Role selector -->
                 <div>
                   <label class="form-label">Role *</label>
                   <select v-model="createModal.form.role_name" class="form-select">
@@ -317,7 +317,7 @@
                   <div class="flex-1 h-px bg-surface-600"></div>
                 </div>
 
-                <!-- Google Register -->
+                <!-- Google Register via Firebase -->
                 <button
                   type="button"
                   @click="googleRegister"
@@ -340,7 +340,7 @@
                   {{ createModal.googleLoading ? 'Registering…' : `Register with Google as ${createModal.form.role_name}` }}
                 </button>
 
-                <!-- Role hint for Google register -->
+                <!-- Role hint -->
                 <p class="text-xs text-surface-400 text-center -mt-2">
                   Google account will be assigned the <span class="font-semibold text-brand-500">{{ createModal.form.role_name }}</span> role
                 </p>
@@ -421,7 +421,6 @@
 
                 <div>
                   <label class="form-label">Role</label>
-                  <!-- Administrator — read only, cannot change -->
                   <div v-if="editModal.user?.role?.name === 'administrator'"
                     class="flex items-center gap-2 px-4 py-2.5 bg-surface-800 border border-surface-600
                           rounded-xl text-sm text-surface-400 cursor-not-allowed">
@@ -430,7 +429,6 @@
                     </span>
                     <span class="text-xs text-surface-400">— Super administrator role cannot be changed</span>
                   </div>
-                  <!-- Other roles — editable -->
                   <select v-else v-model="editModal.form.role_id" class="form-select">
                     <option v-for="r in roles" :key="r.ID" :value="r.ID">{{ r.name }}</option>
                   </select>
@@ -480,6 +478,12 @@ import ConfirmDelete from '@/components/ConfirmDelete.vue'
 import { usersApi, rolesApi, authApi, uploadApi } from '@/services/api.js'
 import { useAuthStore }  from '@/store/auth.js'
 import { usePagination } from '@/composables/usePagination.js'
+
+// ── Firebase imports ──────────────────────────────────────────────────────────
+// Make sure you have firebase installed: npm install firebase
+// and that you have a firebase.js config file at @/firebase.js
+import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+import '@/firebase.js' // ensure Firebase app is initialized
 
 const auth = useAuthStore()
 
@@ -600,89 +604,47 @@ async function saveCreate() {
   } finally { createModal.saving = false }
 }
 
-// ── Google Register Staff — OAuth Popup ───────────────────────────────────────
-function googleRegister() {
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-  if (!clientId) {
-    createModal.error = 'Google Client ID not configured in .env'
-    return
-  }
-
+// ── Google Register Staff — Firebase Popup ────────────────────────────────────
+// Uses Firebase signInWithPopup to get a real Firebase ID token (JWT),
+// which matches what the backend's verifyFirebaseGoogleToken() expects.
+async function googleRegister() {
   createModal.googleLoading = true
-  createModal.error         = ''
+  createModal.error = ''
 
-  const params = new URLSearchParams({
-    client_id:     clientId,
-    redirect_uri:  window.location.origin,
-    response_type: 'token',
-    scope:         'email profile',
-    prompt:        'select_account',
-  })
+  try {
+    const firebaseAuth = getAuth()
+    const provider     = new GoogleAuthProvider()
 
-  const width  = 500
-  const height = 600
-  const left   = window.screenX + (window.outerWidth  - width)  / 2
-  const top    = window.screenY + (window.outerHeight - height) / 2
+    // Force account picker every time so admin can choose any Google account
+    provider.setCustomParameters({ prompt: 'select_account' })
 
-  const popup = window.open(
-    `https://accounts.google.com/o/oauth2/v2/auth?${params}`,
-    'google_oauth',
-    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
-  )
+    // Opens Firebase Google sign-in popup
+    const result  = await signInWithPopup(firebaseAuth, provider)
 
-  const timer = setInterval(async () => {
-    try {
-      // User closed popup
-      if (!popup || popup.closed) {
-        clearInterval(timer)
-        createModal.googleLoading = false
-        return
-      }
+    // getIdToken() returns the Firebase ID token — exactly what the backend validates
+    const idToken = await result.user.getIdToken()
 
-      // Wait until redirected back to our origin
-      let href = ''
-      try { href = popup.location.href } catch { return }
+    // Send Firebase ID token + chosen role to backend
+    const { data } = await authApi.googleRegisterStaff(idToken, createModal.form.role_name)
 
-      if (!href || href === 'about:blank')        return
-      if (!href.includes(window.location.origin)) return
+    createModal.open          = false
+    createModal.googleLoading = false
 
-      clearInterval(timer)
-      popup.close()
-
-      // Extract access_token
-      const hash        = new URL(href).hash.slice(1)
-      const hashParams  = new URLSearchParams(hash)
-      const accessToken = hashParams.get('access_token')
-
-      if (!accessToken) {
-        createModal.error         = 'Google login was cancelled'
-        createModal.googleLoading = false
-        return
-      }
-
-      // Send to backend with the selected role
-      const { data } = await authApi.googleRegisterStaff(
-        accessToken,
-        createModal.form.role_name
-      )
-
-      createModal.open          = false
+    await load(1)
+    showToast(
+      data.is_new
+        ? `✅ "${data.user.name}" registered as ${createModal.form.role_name} via Google`
+        : `ℹ️ "${data.user.name}" already exists — role updated to ${createModal.form.role_name}`
+    )
+  } catch (e) {
+    // Firebase popup cancelled by user
+    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') {
       createModal.googleLoading = false
-
-      await load(1)
-      showToast(
-        data.is_new
-          ? `✅ "${data.user.name}" registered as ${createModal.form.role_name} via Google`
-          : `ℹ️ "${data.user.name}" already exists — role updated to ${createModal.form.role_name}`
-      )
-
-    } catch (e) {
-      clearInterval(timer)
-      popup?.close()
-      createModal.error         = e.response?.data?.error || 'Google registration failed'
-      createModal.googleLoading = false
+      return
     }
-  }, 300)
+    createModal.error         = e.response?.data?.error || e.message || 'Google registration failed'
+    createModal.googleLoading = false
+  }
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────────

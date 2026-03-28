@@ -9,6 +9,7 @@ import Posts       from '@/views/Posts.vue'
 import Categories  from '@/views/Categories.vue'
 import Roles       from '@/views/Roles.vue'
 import Banners from '@/views/Banners.vue'
+import Chat        from '@/views/Chat.vue'
 const routes = [
   {
     path: '/login',
@@ -51,6 +52,12 @@ const routes = [
       title: 'Posts',
       // Both administrator + admin can access
     }
+  },
+  {
+    path: '/chat',
+    name: 'Chat',
+    component: Chat,
+    meta: { requiresAuth: true, title: 'Chat Monitor' }
   },
   {
     path: '/categories',

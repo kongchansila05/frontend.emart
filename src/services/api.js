@@ -1,6 +1,5 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
 
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api',
@@ -124,5 +123,25 @@ export const bannersApi = {
   toggleStatus: (id)       => http.patch(`/admin/banners/${id}/status`),
   remove:       (id)       => http.delete(`/admin/banners/${id}`),
 }
-
+// ─── Post Chat (Buyer ↔ Seller about a Post) ──────────────────────────────────
+export const chatApi = {
+  // Admin
+  adminConvs:    (params)      => http.get('/admin/conversations',                  { params }),
+  adminMessages: (id, params)  => http.get(`/admin/conversations/${id}/messages`,   { params }),
+  adminDelete:   (id)          => http.delete(`/admin/conversations/${id}`),
+  onlineUsers:   ()            => http.get('/admin/online-users'),
+}
+ 
+// ─── Direct Chat (Client ↔ Client, no post) ───────────────────────────────────
+export const directChatApi = {
+  // Client
+  start:       (recipientId)   => http.post('/direct/start',                         { recipient_id: recipientId }),
+  myConvs:     (params)        => http.get('/direct/conversations',                  { params }),
+  messages:    (id, params)    => http.get(`/direct/conversations/${id}/messages`,   { params }),
+ 
+  // Admin
+  adminConvs:    (params)      => http.get('/admin/direct-conversations',                  { params }),
+  adminMessages: (id, params)  => http.get(`/admin/direct-conversations/${id}/messages`,   { params }),
+  adminDelete:   (id)          => http.delete(`/admin/direct-conversations/${id}`),
+}
 export default http

@@ -159,6 +159,16 @@
                 </svg>
                 Edit
               </button>
+
+              <!-- ── View Chats ───────────────────────────────────────────── -->
+              <button @click="viewChats(row)" class="btn-ghost py-1.5 text-xs" title="View conversations">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                </svg>
+                Chats
+              </button>
+
               <button @click="toggleStatus(row)" :class="row.is_active ? 'btn-danger' : 'btn-success'">
                 {{ row.is_active ? 'Disable' : 'Enable' }}
               </button>
@@ -301,7 +311,6 @@
                   <input v-model.number="createModal.form.post_limit" type="number" min="0" class="form-input" />
                 </div>
 
-                <!-- Submit buttons -->
                 <div class="flex gap-3 pt-2">
                   <button type="submit" :disabled="createModal.saving || createModal.uploading" class="btn-primary flex-1 justify-center">
                     <svg v-if="createModal.saving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -320,7 +329,7 @@
                   <div class="flex-1 h-px bg-surface-600"></div>
                 </div>
 
-                <!-- Google Register button -->
+                <!-- Firebase Google Register -->
                 <button
                   type="button"
                   @click="googleRegister"
@@ -343,7 +352,7 @@
                   {{ createModal.googleLoading ? 'Registering…' : 'Register with Google' }}
                 </button>
 
-                <!-- After Google register button in Create modal -->
+                <!-- Phone Register -->
                 <button
                   type="button"
                   @click="showPhoneModal = true"
@@ -404,8 +413,6 @@
               </div>
 
               <form @submit.prevent="saveEdit" class="space-y-4">
-
-                <!-- Profile Photo -->
                 <div>
                   <label class="form-label">Profile Photo</label>
                   <div class="flex items-center gap-4">
@@ -503,7 +510,10 @@ import ConfirmDelete     from '@/components/ConfirmDelete.vue'
 import { usersApi, authApi, uploadApi } from '@/services/api.js'
 import { useAuthStore }  from '@/store/auth.js'
 import { usePagination } from '@/composables/usePagination.js'
-import PhoneOTPModal from '@/components/PhoneOTPModal.vue'
+import PhoneOTPModal     from '@/components/PhoneOTPModal.vue'
+
+// ── Firebase ──────────────────────────────────────────────────────────────────
+import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 
 const auth   = useAuthStore()
 const router = useRouter()
@@ -565,19 +575,22 @@ function onKeyDown(e) {
   }
 }
 
+// ── View Chats ────────────────────────────────────────────────────────────────
+function viewChats(user) {
+  router.push({ path: '/chat', query: { user_id: user.ID, name: user.name } })
+}
+
+// ── Phone Register ────────────────────────────────────────────────────────────
 async function onPhoneRegister({ idToken, phone, name }) {
   showPhoneModal.value      = false
   createModal.googleLoading = true
   try {
     const { data } = await authApi.phoneLogin(idToken, phone, name)
     createModal.open = false
-
     if (data.is_new) {
-      // New client created — reload table
       await load(1)
       showToast(`✅ Client "${data.user.name || phone}" registered via Phone`)
     } else {
-      // Already exists — just show message
       showToast(`ℹ️ "${data.user.name}" already exists`)
     }
   } catch (e) {
@@ -620,10 +633,7 @@ const createModal = reactive({
 })
 
 function openCreate() {
-  Object.assign(createModal, {
-    open: true, saving: false, uploading: false,
-    googleLoading: false, error: '', preview: ''
-  })
+  Object.assign(createModal, { open: true, saving: false, uploading: false, googleLoading: false, error: '', preview: '' })
   createModal.form = { name: '', email: '', password: '', phone: '', post_limit: 10, avatar: '' }
 }
 
@@ -639,62 +649,43 @@ async function saveCreate() {
   } finally { createModal.saving = false }
 }
 
-// ── Google Register — OAuth Popup (no FedCM) ──────────────────────────────────
-function googleRegister() {
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-  if (!clientId) { createModal.error = 'Google Client ID not configured'; return }
-
+// ── Firebase Google Register ──────────────────────────────────────────────────
+// Uses signInWithPopup so Firebase handles the OAuth flow and issues a proper
+// ID token (with iss=securetoken.google.com, sign_in_provider=google.com)
+// that the backend's verifyFirebaseGoogleToken can validate.
+async function googleRegister() {
   createModal.googleLoading = true
   createModal.error         = ''
 
-  const redirectUri = `${window.location.origin}/oauth-callback.html`
-  const params = new URLSearchParams({
-    client_id:     clientId,
-    redirect_uri:  redirectUri,
-    response_type: 'token',
-    scope:         'email profile openid',
-    prompt:        'select_account',
-  })
+  try {
+    const firebaseAuth = getAuth()
+    const provider     = new GoogleAuthProvider()
+    provider.addScope('email')
+    provider.addScope('profile')
+    provider.setCustomParameters({ prompt: 'select_account' })
 
-  const width = 500, height = 600
-  const left  = window.screenX + (window.outerWidth  - width)  / 2
-  const top   = window.screenY + (window.outerHeight - height) / 2
+    const result  = await signInWithPopup(firebaseAuth, provider)
+    const idToken = await result.user.getIdToken()
 
-  window.open(
-    `https://accounts.google.com/o/oauth2/v2/auth?${params}`,
-    'google_oauth',
-    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
-  )
-
-  function onMessage(event) {
-    if (event.origin !== window.location.origin) return
-    window.removeEventListener('message', onMessage)
-
-    if (event.data?.type === 'GOOGLE_ERROR') {
-      createModal.error         = `Google login failed: ${event.data.error}`
-      createModal.googleLoading = false
-      return
+    await handleGoogleToken(idToken)
+  } catch (e) {
+    // user closed the popup or Firebase error
+    if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+      createModal.error = e.message || 'Google sign-in failed'
     }
-    if (event.data?.type === 'GOOGLE_TOKEN') {
-      handleGoogleToken(event.data.token)
-    }
-  }
-  window.addEventListener('message', onMessage)
-
-  setTimeout(() => {
-    window.removeEventListener('message', onMessage)
     createModal.googleLoading = false
-  }, 120000)
+  }
 }
 
-async function handleGoogleToken(accessToken) {
+async function handleGoogleToken(idToken) {
   try {
-    const { data } = await authApi.googleRegisterClient(accessToken)
-    createModal.open = false; createModal.googleLoading = false
+    const { data } = await authApi.googleRegisterClient(idToken)
+    createModal.open          = false
+    createModal.googleLoading = false
 
     if (data.is_new) {
+      await load(1)
       showToast(`✅ "${data.user.name}" registered via Google`)
-      setTimeout(() => router.push('/login'), 1800)
     } else {
       await load(1)
       showToast(`ℹ️ "${data.user.name}" already exists — account linked`)
@@ -726,11 +717,7 @@ function openEdit(user) {
 async function saveEdit() {
   editModal.saving = true; editModal.error = ''
   try {
-    const payload = {
-      post_limit:   editModal.form.post_limit,
-      image_limit:  editModal.form.image_limit,
-      avatar:       editModal.form.avatar,
-    }
+    const payload = { post_limit: editModal.form.post_limit, image_limit: editModal.form.image_limit, avatar: editModal.form.avatar }
     if (editModal.form.new_password) payload.new_password = editModal.form.new_password
     await usersApi.update(editModal.user.ID, payload)
     await load(meta.page)

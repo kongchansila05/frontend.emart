@@ -85,7 +85,7 @@
           <div class="flex-1 h-px bg-surface-600"></div>
         </div>
 
-        <!-- Google Sign In -->
+        <!-- Firebase Google Sign In -->
         <button
           @click="handleGoogleLogin"
           :disabled="googleLoading"
@@ -107,7 +107,7 @@
           {{ googleLoading ? 'Signing in…' : 'Continue with Google' }}
         </button>
 
-        <!-- after Google button, add: -->
+        <!-- Phone Sign In -->
         <button
           @click="showPhoneModal = true"
           class="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border
@@ -152,36 +152,20 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import { useAuthStore } from '@/store/auth.js'
-import { authApi }      from '@/services/api.js'
-import PhoneOTPModal from '@/components/PhoneOTPModal.vue'
+import { useAuthStore }  from '@/store/auth.js'
+import { authApi }       from '@/services/api.js'
+import PhoneOTPModal     from '@/components/PhoneOTPModal.vue'
 
-const auth          = useAuthStore()
-const loading       = ref(false)
-const googleLoading = ref(false)
-const error         = ref('')
-const showPwd       = ref(false)
-const form          = reactive({ email: '', password: '' })
+// ── Firebase ──────────────────────────────────────────────────────────────────
+import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+
+const auth           = useAuthStore()
+const loading        = ref(false)
+const googleLoading  = ref(false)
+const error          = ref('')
+const showPwd        = ref(false)
+const form           = reactive({ email: '', password: '' })
 const showPhoneModal = ref(false)
-
-async function onPhoneSuccess({ idToken, phone, name }) {
-  showPhoneModal.value = false
-  error.value          = ''
-  try {
-    const { data } = await authApi.phoneLogin(idToken, phone, name)
-
-    const role = typeof data.user.role === 'string'
-      ? data.user.role : data.user.role?.name
-
-    if (role !== 'administrator' && role !== 'admin') {
-      error.value = `Access denied — this phone is registered as ${role}, not admin`
-      return
-    }
-    auth.setAuth(data.token, data.user)
-  } catch (e) {
-    error.value = e.response?.data?.error || 'Phone login failed'
-  }
-}
 
 // ── Email / Password ──────────────────────────────────────────────────────────
 async function handleLogin() {
@@ -201,76 +185,36 @@ function fillDemo() {
   form.password = 'admin123'
 }
 
-// ── Google Login — OAuth Popup (no FedCM/GSI) ────────────────────────────────
-function handleGoogleLogin() {
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-  if (!clientId) {
-    error.value = 'Google Client ID not configured in .env'
-    return
-  }
-
+// ── Firebase Google Login ─────────────────────────────────────────────────────
+// signInWithPopup issues a proper Firebase ID token (iss=securetoken.google.com,
+// sign_in_provider=google.com) that the backend's verifyFirebaseGoogleToken validates.
+async function handleGoogleLogin() {
   googleLoading.value = true
   error.value         = ''
 
-  // ── Use dedicated callback page as redirect_uri ───────────────────────────
-  const redirectUri = `${window.location.origin}/oauth-callback.html`
+  try {
+    const firebaseAuth = getAuth()
+    const provider     = new GoogleAuthProvider()
+    provider.addScope('email')
+    provider.addScope('profile')
+    provider.setCustomParameters({ prompt: 'select_account' })
 
-  const params = new URLSearchParams({
-    client_id:     clientId,
-    redirect_uri:  redirectUri,
-    response_type: 'token',
-    scope:         'email profile openid',
-    prompt:        'select_account',
-  })
+    const result  = await signInWithPopup(firebaseAuth, provider)
+    const idToken = await result.user.getIdToken()
 
-  const width  = 500
-  const height = 600
-  const left   = window.screenX + (window.outerWidth  - width)  / 2
-  const top    = window.screenY + (window.outerHeight - height) / 2
-
-  window.open(
-    `https://accounts.google.com/o/oauth2/v2/auth?${params}`,
-    'google_login',
-    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
-  )
-
-  // ── Listen for postMessage from callback page ─────────────────────────────
-  function onMessage(event) {
-    // Only accept messages from our own origin
-    if (event.origin !== window.location.origin) return
-
-    window.removeEventListener('message', onMessage)
-
-    if (event.data?.type === 'GOOGLE_ERROR') {
-      error.value         = `Google login failed: ${event.data.error}`
-      googleLoading.value = false
-      return
+    await handleToken(idToken)
+  } catch (e) {
+    // Silently ignore popup closed / cancelled — no error banner needed
+    if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+      error.value = e.message || 'Google sign-in failed'
     }
-
-    if (event.data?.type === 'GOOGLE_TOKEN') {
-      handleToken(event.data.token)
-    }
-  }
-
-  window.addEventListener('message', onMessage)
-
-  // ── Timeout fallback — if popup closed without message ────────────────────
-  const timeout = setTimeout(() => {
-    window.removeEventListener('message', onMessage)
     googleLoading.value = false
-  }, 120000) // 2 min timeout
-
-  // Clean up timeout when message received
-  const origOnMessage = onMessage
-  window.addEventListener('message', function cleanup() {
-    clearTimeout(timeout)
-    window.removeEventListener('message', cleanup)
-  }, { once: true })
+  }
 }
 
-async function handleToken(accessToken) {
+async function handleToken(idToken) {
   try {
-    const { data } = await authApi.googleLogin(accessToken)
+    const { data } = await authApi.googleLogin(idToken)
 
     const role = typeof data.user.role === 'string'
       ? data.user.role
@@ -283,10 +227,31 @@ async function handleToken(accessToken) {
     }
 
     auth.setAuth(data.token, data.user)
-
   } catch (e) {
     error.value         = e.response?.data?.error || e.message || 'Google login failed'
     googleLoading.value = false
+  }
+}
+
+// ── Phone OTP Login ───────────────────────────────────────────────────────────
+async function onPhoneSuccess({ idToken, phone, name }) {
+  showPhoneModal.value = false
+  error.value          = ''
+  try {
+    const { data } = await authApi.phoneLogin(idToken, phone, name)
+
+    const role = typeof data.user.role === 'string'
+      ? data.user.role
+      : data.user.role?.name
+
+    if (role !== 'administrator' && role !== 'admin') {
+      error.value = `Access denied — this phone is registered as ${role}, not admin`
+      return
+    }
+
+    auth.setAuth(data.token, data.user)
+  } catch (e) {
+    error.value = e.response?.data?.error || 'Phone login failed'
   }
 }
 </script>
